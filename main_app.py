@@ -137,17 +137,19 @@ if user_query:
         ).execute()
         
       # If the database returns matching context, inject it into the prompt
+        # If the database returns matching context, inject it into the prompt
         if response.data:
             context = "\n\n".join([doc["content"] for doc in response.data])
             
-           # Add this to see exactly what the database extracted!
-            with st.expander("🔍 See exactly what text the database found"):
-               st.write(context)
-
+            # 🚨 STRONGER PROMPT: Force the AI to acknowledge the file
             rag_system_prompt = (
-                "You are a helpful assistant. Use the following document context to answer the user's question. "
-                "If the answer is not contained in the context, answer normally but clarify it isn't in the document.\n\n"
-                f"Context:\n{context}"
+                "You are an expert document analysis assistant. The user has uploaded a file, and the text "
+                "extracted from it is provided below in the Context. \n"
+                "CRITICAL INSTRUCTIONS:\n"
+                "1. NEVER say you cannot read or access files. You have the file text right below.\n"
+                "2. If the user asks about the document, summarize or extract from the Context.\n"
+                "3. If the answer is not in the Context, say 'I cannot find that in the document.'\n\n"
+                f"Context from uploaded file:\n{context}"
             )
             messages_for_llm[0] = SystemMessage(content=rag_system_prompt)
             
