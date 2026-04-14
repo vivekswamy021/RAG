@@ -3,7 +3,7 @@ from langchain_groq import ChatGroq
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 import os
 import tempfile
-from langchain_community.document_loaders import PyMuPDFLoader
+from langchain_community.document_loaders import (PyMuPDFLoader,TextLoader, CSVLoader, Docx2txtLoader)
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import SupabaseVectorStore
@@ -23,9 +23,7 @@ if not groq_api_key or not supabase_url or not supabase_key:
     st.error("🚨 Missing API Keys. Please check your GROQ_API_KEY, SUPABASE_URL, and SUPABASE_KEY.")
     st.stop()
 
-# -------------------------------
-# 2️⃣ Initialize Models & DB Client
-# -------------------------------
+
 # -------------------------------
 # 2️⃣ Initialize Models & DB Client (DEBUG MODE)
 # -------------------------------
@@ -46,7 +44,8 @@ try:
 except Exception as e:
     st.error(f"🚨 SUPABASE ERROR: {e}")
     st.stop()
-
+    
+# ----- Embeddings-------
 @st.cache_resource
 def get_embeddings():
     return HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
@@ -73,7 +72,7 @@ st.caption("Documents uploaded here are saved permanently to your Supabase Vecto
 # -------------------------------
 with st.sidebar:
     st.header("Upload Document")
-    uploaded_file = st.file_uploader("Upload a PDF to the database", type=["pdf"])
+    uploaded_file = st.file_uploader("Upload a PDF to the database", type=["pdf","DOC","TXT","CSV"])
     
     if uploaded_file:
         # Check if we processed it in this session to avoid spamming the DB
@@ -118,9 +117,6 @@ for msg in st.session_state.messages:
 # -------------------------------
 # 6️⃣ User Input & RAG Logic
 # -------------------------------
-# -------------------------------
-# 6️⃣ User Input & RAG Logic
-# -------------------------------
 user_query = st.chat_input("Type your message...")
 
 if user_query:
@@ -141,14 +137,14 @@ if user_query:
             {"query_embedding": query_vector, "match_count": 3}
         ).execute()
         
-        # 🚨 ADD THIS LINE to see exactly what Supabase hands back
+        #  ADDING THIS LINE to see exactly what Supabase hands back
         st.info(f"Database found {len(response.data)} matching paragraphs.")
         
         # If the database returns matching context, inject it into the prompt
         if response.data:
             context = "\n\n".join([doc["content"] for doc in response.data])
             
-            # 🚨 STRONGER PROMPT: Force the AI to acknowledge the file
+            #  STRONGER PROMPT: Forcing the AI to acknowledge the file
             rag_system_prompt = (
                 "You are an expert document analysis assistant. The user has uploaded a file, and the text "
                 "extracted from it is provided below in the Context. \n"
