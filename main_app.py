@@ -131,12 +131,15 @@ if user_query:
         query_vector = embeddings.embed_query(user_query)
         
         # Call the Supabase SQL function directly
+        # Call the Supabase SQL function directly
         response = supabase.rpc(
             "match_documents", 
             {"query_embedding": query_vector, "match_count": 3}
         ).execute()
         
-      # If the database returns matching context, inject it into the prompt
+        # 🚨 ADD THIS LINE to see exactly what Supabase hands back
+        st.info(f"Database found {len(response.data)} matching paragraphs.")
+        
         # If the database returns matching context, inject it into the prompt
         if response.data:
             context = "\n\n".join([doc["content"] for doc in response.data])
