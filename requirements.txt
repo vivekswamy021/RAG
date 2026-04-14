@@ -11,6 +11,10 @@ langchain-text-splitters
 
 # --- Document Processing ---
 pyMUpdf
+TextLoader
+CSVLoader
+Docx2txtLoader
+
 
 # --- Vector Database & Embeddings ---
 supabase
