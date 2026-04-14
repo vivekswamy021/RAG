@@ -1,14 +1,14 @@
 # --- Core Framework ---
+--extra-index-url https://download.pytorch.org/whl/cpu
 streamlit
 langchain
 langchain-groq
-langchain-community>=0.2.10
+langchain-community
 langchain-huggingface
 langchain-text-splitters
 pypdf
-faiss-cpu
-sentence-transformers
 supabase
+sentence-transformers
 torch
 torchvision
 
