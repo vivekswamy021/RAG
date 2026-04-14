@@ -26,15 +26,25 @@ if not groq_api_key or not supabase_url or not supabase_key:
 # -------------------------------
 # 2️⃣ Initialize Models & DB Client
 # -------------------------------
+# -------------------------------
+# 2️⃣ Initialize Models & DB Client (DEBUG MODE)
+# -------------------------------
 try:
     llm = ChatGroq(
         model_name="llama-3.3-70b-versatile", 
         groq_api_key=groq_api_key,
         streaming=True
     )
-    supabase: Client = create_client(supabase_url, supabase_key)
+    # If it works, it will silently move on
 except Exception as e:
-    st.error(f"Failed to initialize models/database: {e}")
+    st.error(f"🚨 GROQ ERROR: {e}")
+    st.stop()
+
+try:
+    supabase: Client = create_client(supabase_url, supabase_key)
+    # If it works, it will silently move on
+except Exception as e:
+    st.error(f"🚨 SUPABASE ERROR: {e}")
     st.stop()
 
 @st.cache_resource
