@@ -1,11 +1,19 @@
 # --- Core Framework ---
 streamlit
+langchain
+langchain-groq
+langchain-community
+langchain-huggingface
+langchain-text-splitters
+pypdf
+faiss-cpu
+sentence-transformers
 
 # --- LangChain Ecosystem ---
 langchain
 langchain-groq
 langchain-community
-langchain-core
+
 
 # --- Document Processing ---
 pypdf
@@ -16,4 +24,4 @@ sentence-transformers
 huggingface-hub
 
 # --- Utilities ---
-python-dotenv
+
