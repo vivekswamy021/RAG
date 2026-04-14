@@ -1,4 +1,4 @@
-pip install pypdf faiss-cpu langchain-community sentence-transformers
+!pip install pypdf faiss-cpu langchain-community sentence-transformers
 import streamlit as st
 import os
 from langchain_groq import ChatGroq
