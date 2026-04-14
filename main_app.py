@@ -136,12 +136,12 @@ if user_query:
             {"query_embedding": query_vector, "match_count": 3}
         ).execute()
         
-       # If the database returns matching context, inject it into the prompt
+      # If the database returns matching context, inject it into the prompt
         if response.data:
             context = "\n\n".join([doc["content"] for doc in response.data])
             
            # Add this to see exactly what the database extracted!
-           with st.expander("🔍 See exactly what text the database found"):
+            with st.expander("🔍 See exactly what text the database found"):
                st.write(context)
 
             rag_system_prompt = (
