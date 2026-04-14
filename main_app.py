@@ -100,6 +100,10 @@ with st.sidebar:
     st.divider()
     if st.button("Clear Screen"):
         st.session_state.messages = [SystemMessage(content="You are a helpful assistant.")]
+        
+        # 🚨 ADD THIS LINE: Force Streamlit to forget the old file name
+        st.session_state.pop("uploaded_filename", None) 
+        
         st.rerun()
 
 # -------------------------------
