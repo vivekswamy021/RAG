@@ -140,9 +140,9 @@ if user_query:
         if response.data:
             context = "\n\n".join([doc["content"] for doc in response.data])
             
-+           # Add this to see exactly what the database extracted!
-+           with st.expander("🔍 See exactly what text the database found"):
-+               st.write(context)
+           # Add this to see exactly what the database extracted!
+           with st.expander("🔍 See exactly what text the database found"):
+               st.write(context)
 
             rag_system_prompt = (
                 "You are a helpful assistant. Use the following document context to answer the user's question. "
