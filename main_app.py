@@ -114,6 +114,9 @@ for msg in st.session_state.messages:
 # -------------------------------
 # 6️⃣ User Input & RAG Logic
 # -------------------------------
+# -------------------------------
+# 6️⃣ User Input & RAG Logic
+# -------------------------------
 user_query = st.chat_input("Type your message...")
 
 if user_query:
@@ -122,18 +125,29 @@ if user_query:
 
     messages_for_llm = st.session_state.messages.copy()
 
-    # Search Supabase for relevant text chunks based on the query
-    relevant_docs = vector_store.similarity_search(user_query, k=3)
-    
-    # If the database returns matching context, inject it into the prompt
-    if relevant_docs:
-        context = "\n\n".join([doc.page_content for doc in relevant_docs])
-        rag_system_prompt = (
-            "You are a helpful assistant. Use the following document context to answer the user's question. "
-            "If the answer is not contained in the context, answer normally but clarify it isn't in the document.\n\n"
-            f"Context:\n{context}"
-        )
-        messages_for_llm[0] = SystemMessage(content=rag_system_prompt)
+    try:
+        # 🚨 THE FIX: Bypass LangChain's broken search and query Supabase directly!
+        embeddings = get_embeddings()
+        query_vector = embeddings.embed_query(user_query)
+        
+        # Call the Supabase SQL function directly
+        response = supabase.rpc(
+            "match_documents", 
+            {"query_embedding": query_vector, "match_count": 3}
+        ).execute()
+        
+        # If the database returns matching context, inject it into the prompt
+        if response.data:
+            context = "\n\n".join([doc["content"] for doc in response.data])
+            rag_system_prompt = (
+                "You are a helpful assistant. Use the following document context to answer the user's question. "
+                "If the answer is not contained in the context, answer normally but clarify it isn't in the document.\n\n"
+                f"Context:\n{context}"
+            )
+            messages_for_llm[0] = SystemMessage(content=rag_system_prompt)
+            
+    except Exception as e:
+        st.error(f"Database search failed: {e}")
 
     # Generate assistant response
     with st.chat_message("assistant"):
