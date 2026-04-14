@@ -2,13 +2,13 @@
 streamlit
 langchain
 langchain-groq
-langchain-community
+langchain-community>=0.2.10
 langchain-huggingface
 langchain-text-splitters
 pypdf
 faiss-cpu
 sentence-transformers
-supabase==2.3.6
+supabase
 torch
 torchvision
 
