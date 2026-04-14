@@ -1,0 +1,19 @@
+# --- Core Framework ---
+streamlit
+
+# --- LangChain Ecosystem ---
+langchain
+langchain-groq
+langchain-community
+langchain-core
+
+# --- Document Processing ---
+pypdf
+
+# --- Vector Database & Embeddings ---
+faiss-cpu
+sentence-transformers
+huggingface-hub
+
+# --- Utilities ---
+python-dotenv
