@@ -9,6 +9,8 @@ pypdf
 faiss-cpu
 sentence-transformers
 supabase
+torch
+torchvision
 
 # --- LangChain Ecosystem ---
 langchain
