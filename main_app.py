@@ -5,23 +5,26 @@ import os
 import tempfile
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_community.vectorstores import SupabaseVectorStore
+from supabase.client import Client, create_client
 
 # -------------------------------
 # 1️⃣ Set up Environment & Page
 # -------------------------------
-st.set_page_config(page_title="Groq Doc Chatbot", page_icon="🤖", layout="centered")
+st.set_page_config(page_title="Groq + Supabase RAG", page_icon="🤖", layout="centered")
 
-# Get API key from Streamlit Secrets (for deployment) or Environment Variables (for local)
+# Get API keys from Streamlit Secrets or Environment Variables
 groq_api_key = st.secrets.get("GROQ_API_KEY", os.getenv("GROQ_API_KEY"))
+supabase_url = st.secrets.get("SUPABASE_URL", os.getenv("SUPABASE_URL"))
+supabase_key = st.secrets.get("SUPABASE_KEY", os.getenv("SUPABASE_KEY"))
 
-if not groq_api_key:
-    st.error("🚨 GROQ_API_KEY not found. Please set it in your environment variables or Streamlit secrets.")
+if not groq_api_key or not supabase_url or not supabase_key:
+    st.error("🚨 Missing API Keys. Please check your GROQ_API_KEY, SUPABASE_URL, and SUPABASE_KEY.")
     st.stop()
 
 # -------------------------------
-# 2️⃣ Initialize Models
+# 2️⃣ Initialize Models & DB Client
 # -------------------------------
 try:
     llm = ChatGroq(
@@ -29,14 +32,22 @@ try:
         groq_api_key=groq_api_key,
         streaming=True
     )
+    supabase: Client = create_client(supabase_url, supabase_key)
 except Exception as e:
-    st.error(f"Failed to initialize Groq model: {e}")
+    st.error(f"Failed to initialize models/database: {e}")
     st.stop()
 
-# Cache the embeddings model so it doesn't reload on every interaction
 @st.cache_resource
 def get_embeddings():
     return HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+
+# Create the vector store connection
+vector_store = SupabaseVectorStore(
+    client=supabase,
+    embedding=get_embeddings(),
+    table_name="documents",
+    query_name="match_documents"
+)
 
 # -------------------------------
 # 3️⃣ Chat History Management
@@ -44,51 +55,41 @@ def get_embeddings():
 if "messages" not in st.session_state:
     st.session_state.messages = [SystemMessage(content="You are a helpful assistant.")]
 
-st.title("🤖 Groq Document Chatbot")
+st.title("🤖 Groq & Supabase Chatbot")
+st.caption("Documents uploaded here are saved permanently to your Supabase Vector Database.")
 
 # -------------------------------
 # 4️⃣ Sidebar & File Uploading
 # -------------------------------
 with st.sidebar:
     st.header("Upload Document")
-    uploaded_file = st.file_uploader("Upload a PDF to chat with it", type=["pdf"])
+    uploaded_file = st.file_uploader("Upload a PDF to the database", type=["pdf"])
     
-    # Process the uploaded file
     if uploaded_file:
-        # Check if we have already processed this exact file
-        if "vector_store" not in st.session_state or st.session_state.get("uploaded_filename") != uploaded_file.name:
-            with st.spinner("Reading and indexing PDF..."):
-                # Save uploaded file temporarily to disk
+        # Check if we processed it in this session to avoid spamming the DB
+        if st.session_state.get("uploaded_filename") != uploaded_file.name:
+            with st.spinner("Uploading and indexing to Supabase..."):
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
                     tmp_file.write(uploaded_file.getvalue())
                     tmp_file_path = tmp_file.name
 
-                # Load and split the document
                 loader = PyPDFLoader(tmp_file_path)
                 docs = loader.load()
 
                 text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
                 splits = text_splitter.split_documents(docs)
 
-                # Create the vector store
-                embeddings = get_embeddings()
-                vector_store = FAISS.from_documents(splits, embeddings)
+                # Push documents to Supabase (this saves them permanently)
+                vector_store.add_documents(splits)
 
-                # Save to session state
-                st.session_state.vector_store = vector_store
                 st.session_state.uploaded_filename = uploaded_file.name
-                
-                # Cleanup temp file
                 os.remove(tmp_file_path) 
                 
-            st.success("✅ PDF processed! Ask me questions about it.")
+            st.success("✅ PDF saved to Supabase! You can now chat with it.")
 
     st.divider()
-    if st.button("Clear Conversation"):
+    if st.button("Clear Screen"):
         st.session_state.messages = [SystemMessage(content="You are a helpful assistant.")]
-        # Optionally clear vector store if you want a hard reset:
-        # st.session_state.pop("vector_store", None)
-        # st.session_state.pop("uploaded_filename", None)
         st.rerun()
 
 # -------------------------------
@@ -101,28 +102,25 @@ for msg in st.session_state.messages:
         st.chat_message("assistant").write(msg.content)
 
 # -------------------------------
-# 6️⃣ User Input & Streaming
+# 6️⃣ User Input & RAG Logic
 # -------------------------------
 user_query = st.chat_input("Type your message...")
 
 if user_query:
-    # Show user message
     st.session_state.messages.append(HumanMessage(content=user_query))
     st.chat_message("user").write(user_query)
 
-    # Prepare messages for LLM
     messages_for_llm = st.session_state.messages.copy()
 
-    # If a document is uploaded, inject relevant context into the System Prompt
-    if "vector_store" in st.session_state:
-        # Search the vector database for text matching the user query
-        relevant_docs = st.session_state.vector_store.similarity_search(user_query, k=3)
+    # Search Supabase for relevant text chunks based on the query
+    relevant_docs = vector_store.similarity_search(user_query, k=3)
+    
+    # If the database returns matching context, inject it into the prompt
+    if relevant_docs:
         context = "\n\n".join([doc.page_content for doc in relevant_docs])
-        
-        # Modify the system message dynamically for this specific turn
         rag_system_prompt = (
             "You are a helpful assistant. Use the following document context to answer the user's question. "
-            "If the answer is not contained in the context, just say you don't know based on the document.\n\n"
+            "If the answer is not contained in the context, answer normally but clarify it isn't in the document.\n\n"
             f"Context:\n{context}"
         )
         messages_for_llm[0] = SystemMessage(content=rag_system_prompt)
@@ -133,12 +131,10 @@ if user_query:
         full_response = ""
 
         try:
-            # Stream the response using the dynamically built messages
             for chunk in llm.stream(messages_for_llm):
                 full_response += chunk.content
                 response_placeholder.markdown(full_response + "▌")
             
-            # Final update without the cursor
             response_placeholder.markdown(full_response)
             st.session_state.messages.append(AIMessage(content=full_response))
             
