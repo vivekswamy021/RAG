@@ -72,7 +72,7 @@ st.caption("Documents uploaded here are saved permanently to your Supabase Vecto
 # -------------------------------
 with st.sidebar:
     st.header("Upload Document")
-    uploaded_file = st.file_uploader("Upload a PDF to the database", type=["pdf","DOC","TXT","CSV"])
+    uploaded_file = st.file_uploader("Upload a PDF to the database", type=["pdf"])
     
     if uploaded_file:
         # Check if we processed it in this session to avoid spamming the DB
