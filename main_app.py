@@ -85,7 +85,7 @@ with st.sidebar:
                 loader = PyMuPDFLoader(tmp_file_path)
                 docs = loader.load()
 
-                text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+                text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=100)
                 splits = text_splitter.split_documents(docs)
 
                 # Push documents to Supabase (this saves them permanently)
