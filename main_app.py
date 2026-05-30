@@ -149,7 +149,7 @@ if user_query:
         # Call the Supabase SQL function directly
         response = supabase.rpc(
             "match_documents", 
-            {"query_embedding": query_vector, "match_count": 5}  # Bumped up match count slightly for multi-doc contexts
+            {"query_embedding": query_vector, "match_count": 10}  # Bumped up match count slightly for multi-doc contexts
         ).execute()
         
         st.info(f"Database found {len(response.data)} matching paragraphs.")
