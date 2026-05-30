@@ -41,7 +41,7 @@ except Exception as e:
 try:
     supabase: Client = create_client(supabase_url, supabase_key)
 except Exception as e:
-    st.error(f"🚨 SUPABASE ERROR: {e}")
+    st.error(f" SUPABASE ERROR: {e}")
     st.stop()
     
 # ----- Embeddings -------
@@ -63,11 +63,11 @@ vector_store = SupabaseVectorStore(
 if "messages" not in st.session_state:
     st.session_state.messages = [SystemMessage(content="You are a helpful assistant.")]
 
-# 💡 TRACKING MULTIPLE FILES: Initialize a set to keep track of processed files
+#  TRACKING MULTIPLE FILES: Initialize a set to keep track of processed files
 if "processed_files" not in st.session_state:
     st.session_state.processed_files = set()
 
-st.title("🤖 Groq & Supabase Chatbot")
+st.title("🤖 Groq & Supabase RAG")
 st.caption("Documents uploaded here are saved permanently to your Supabase Vector Database.")
 
 # -------------------------------
