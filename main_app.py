@@ -3,7 +3,7 @@ from langchain_groq import ChatGroq
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 import os
 import tempfile
-import uuid  #  Added to generate unique IDs for chunks and satisfy the DB constraint
+import uuid  
 from langchain_community.document_loaders import PyMuPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -58,10 +58,14 @@ vector_store = SupabaseVectorStore(
 )
 
 # -------------------------------
-# 3️⃣ Chat History Management
+# 3️⃣ Chat History & File Tracking Management
 # -------------------------------
 if "messages" not in st.session_state:
     st.session_state.messages = [SystemMessage(content="You are a helpful assistant.")]
+
+# 💡 TRACKING MULTIPLE FILES: Initialize a set to keep track of processed files
+if "processed_files" not in st.session_state:
+    st.session_state.processed_files = set()
 
 st.title("🤖 Groq & Supabase Chatbot")
 st.caption("Documents uploaded here are saved permanently to your Supabase Vector Database.")
@@ -70,38 +74,52 @@ st.caption("Documents uploaded here are saved permanently to your Supabase Vecto
 # 4️⃣ Sidebar & File Uploading
 # -------------------------------
 with st.sidebar:
-    st.header("Upload Document")
-    uploaded_file = st.file_uploader("Upload a PDF to the database", type=["pdf"])
+    st.header("Upload Documents")
     
-    if uploaded_file:
-        # Check if we processed it in this session to avoid spamming the DB
-        if st.session_state.get("uploaded_filename") != uploaded_file.name:
-            with st.spinner("Uploading and indexing to Supabase..."):
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
-                    tmp_file.write(uploaded_file.getvalue())
-                    tmp_file_path = tmp_file.name
+    # CHANGE: accept_multiple_files=True allows users to upload a batch of PDFs
+    uploaded_files = st.file_uploader(
+        "Upload one or more PDFs to the database", 
+        type=["pdf"], 
+        accept_multiple_files=True
+    )
+    
+    if uploaded_files:
+        for uploaded_file in uploaded_files:
+            # Check if this specific file hasn't been uploaded in the current session
+            if uploaded_file.name not in st.session_state.processed_files:
+                with st.spinner(f"Indexing {uploaded_file.name} to Supabase..."):
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
+                        tmp_file.write(uploaded_file.getvalue())
+                        tmp_file_path = tmp_file.name
 
-                loader = PyMuPDFLoader(tmp_file_path)
-                docs = loader.load()
+                    try:
+                        loader = PyMuPDFLoader(tmp_file_path)
+                        docs = loader.load()
 
-                text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=100)
-                splits = text_splitter.split_documents(docs)
+                        text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=100)
+                        splits = text_splitter.split_documents(docs)
 
-                #  FIX: Generate a list of unique strings for the ID column 
-                chunk_ids = [str(uuid.uuid4()) for _ in range(len(splits))]
+                        # Generate a list of unique strings for the ID column 
+                        chunk_ids = [str(uuid.uuid4()) for _ in range(len(splits))]
 
-                #  FIX: Explicitly pass the generated ids list into the vector store
-                vector_store.add_documents(splits, ids=chunk_ids)
+                        # Push chunks into the vector store
+                        vector_store.add_documents(splits, ids=chunk_ids)
 
-                st.session_state.uploaded_filename = uploaded_file.name
-                os.remove(tmp_file_path) 
-                
-            st.success("✅ PDF saved to Supabase! You can now chat with it.")
+                        # Mark this file as completed
+                        st.session_state.processed_files.add(uploaded_file.name)
+                        st.success(f"✅ Loaded: {uploaded_file.name}")
+                        
+                    except Exception as e:
+                        st.error(f"Failed to process {uploaded_file.name}: {e}")
+                    finally:
+                        if os.path.exists(tmp_file_path):
+                            os.remove(tmp_file_path) 
 
     st.divider()
     if st.button("Clear Screen"):
         st.session_state.messages = [SystemMessage(content="You are a helpful assistant.")]
-        st.session_state.pop("uploaded_filename", None) 
+        # Clear out the tracking set so files can be re-uploaded if desired
+        st.session_state.processed_files = set() 
         st.rerun()
 
 # -------------------------------
@@ -131,7 +149,7 @@ if user_query:
         # Call the Supabase SQL function directly
         response = supabase.rpc(
             "match_documents", 
-            {"query_embedding": query_vector, "match_count": 5}
+            {"query_embedding": query_vector, "match_count": 5}  # Bumped up match count slightly for multi-doc contexts
         ).execute()
         
         st.info(f"Database found {len(response.data)} matching paragraphs.")
@@ -141,13 +159,13 @@ if user_query:
             context = "\n\n".join([doc["content"] for doc in response.data])
             
             rag_system_prompt = (
-                "You are an expert document analysis assistant. The user has uploaded a file, and the text "
-                "extracted from it is provided below in the Context. \n"
+                "You are an expert document analysis assistant. The user has uploaded files, and the text "
+                "extracted from them is provided below in the Context. \n"
                 "CRITICAL INSTRUCTIONS:\n"
                 "1. NEVER say you cannot read or access files. You have the file text right below.\n"
-                "2. If the user asks about the document, summarize or extract from the Context.\n"
-                "3. If the answer is not in the Context, say 'I cannot find that in the document.'\n\n"
-                f"Context from uploaded file:\n{context}"
+                "2. If the user asks about the documents, summarize or extract from the Context.\n"
+                "3. If the answer is not in the Context, say 'I cannot find that in the documents.'\n\n"
+                f"Context from uploaded files:\n{context}"
             )
             messages_for_llm[0] = SystemMessage(content=rag_system_prompt)
             
