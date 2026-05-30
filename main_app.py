@@ -3,7 +3,8 @@ from langchain_groq import ChatGroq
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 import os
 import tempfile
-from langchain_community.document_loaders import (PyMuPDFLoader,TextLoader, CSVLoader, Docx2txtLoader)
+import uuid  #  Added to generate unique IDs for chunks and satisfy the DB constraint
+from langchain_community.document_loaders import PyMuPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import SupabaseVectorStore
@@ -33,19 +34,17 @@ try:
         groq_api_key=groq_api_key,
         streaming=True
     )
-    # If it works, it will silently move on
 except Exception as e:
     st.error(f"🚨 GROQ ERROR: {e}")
     st.stop()
 
 try:
     supabase: Client = create_client(supabase_url, supabase_key)
-    # If it works, it will silently move on
 except Exception as e:
     st.error(f"🚨 SUPABASE ERROR: {e}")
     st.stop()
     
-# ----- Embeddings-------
+# ----- Embeddings -------
 @st.cache_resource
 def get_embeddings():
     return HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
@@ -88,8 +87,11 @@ with st.sidebar:
                 text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=100)
                 splits = text_splitter.split_documents(docs)
 
-                # Push documents to Supabase (this saves them permanently)
-                vector_store.add_documents(splits)
+                #  FIX: Generate a list of unique strings for the ID column 
+                chunk_ids = [str(uuid.uuid4()) for _ in range(len(splits))]
+
+                #  FIX: Explicitly pass the generated ids list into the vector store
+                vector_store.add_documents(splits, ids=chunk_ids)
 
                 st.session_state.uploaded_filename = uploaded_file.name
                 os.remove(tmp_file_path) 
@@ -99,10 +101,7 @@ with st.sidebar:
     st.divider()
     if st.button("Clear Screen"):
         st.session_state.messages = [SystemMessage(content="You are a helpful assistant.")]
-        
-        # 🚨 ADD THIS LINE: Force Streamlit to forget the old file name
         st.session_state.pop("uploaded_filename", None) 
-        
         st.rerun()
 
 # -------------------------------
@@ -126,25 +125,21 @@ if user_query:
     messages_for_llm = st.session_state.messages.copy()
 
     try:
-        # 🚨 THE FIX: Bypass LangChain's broken search and query Supabase directly!
         embeddings = get_embeddings()
         query_vector = embeddings.embed_query(user_query)
         
-        # Call the Supabase SQL function directly
         # Call the Supabase SQL function directly
         response = supabase.rpc(
             "match_documents", 
             {"query_embedding": query_vector, "match_count": 3}
         ).execute()
         
-        #  ADDING THIS LINE to see exactly what Supabase hands back
         st.info(f"Database found {len(response.data)} matching paragraphs.")
         
         # If the database returns matching context, inject it into the prompt
         if response.data:
             context = "\n\n".join([doc["content"] for doc in response.data])
             
-            #  STRONGER PROMPT: Forcing the AI to acknowledge the file
             rag_system_prompt = (
                 "You are an expert document analysis assistant. The user has uploaded a file, and the text "
                 "extracted from it is provided below in the Context. \n"
